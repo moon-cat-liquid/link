@@ -1,0 +1,9 @@
+[package]
+name = "link"
+version = "0.1.0"
+authors = ["Chen Zhengtong <2458091905@qq.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
