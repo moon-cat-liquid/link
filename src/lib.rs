@@ -61,6 +61,10 @@ impl<T> Link<T> {
     pub fn new() -> Self {
         Link {data: None, len: 0}
     }
+    /// 判断链表是否为空
+    pub fn empty(&self) -> bool {
+        self.len == 0
+    }
     /// 获取链表长度
     pub fn len(&self) -> usize {
         self.len
