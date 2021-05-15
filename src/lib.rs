@@ -10,7 +10,7 @@ pub struct Node<T> {
 }
 impl<T> Node<T> {
     /// 创建节点
-    fn new(value:T, data: Option<Box<Node<T>>>) -> Self {
+    fn new(value:T, data: Option<Box<Self>>) -> Self {
         Self {value, next: Link::from(data)}
     }
     /// 节点转化为链表
@@ -25,16 +25,37 @@ impl<T> Node<T> {
         Link(Some(Box::new(self)))
     }
     /// 查看不可变子节点
+    /// # 例子
     /// ```
     /// use link::*;
     /// let l: Link<usize> = link![1,2,3];
     /// let node = l.get(1).unwrap();
     /// assert_eq!(node.next().unwrap().value, 3);
     /// ```
-    pub fn next(&self) -> Option<&Box<Node<T>>> {
-        self.next.0.as_ref()
+    pub fn next(&self) -> Option<&Self> {
+        self.next.0.as_ref().map(|n| n.as_ref())
+    }
+    /// 节点跳过
+    /// # 例子
+    /// ```
+    /// use link::*;
+    /// let l: Link<usize> = link![1,2,3,4];
+    /// let mut node: &Node<usize> = l.get(0).unwrap();
+    /// assert_eq!(node.value, 1);
+    /// node = node.skip(1).unwrap();
+    /// assert_eq!(node.value, 2);
+    /// node = node.skip(2).unwrap();
+    /// assert_eq!(node.value, 4);
+    /// ```
+    pub fn skip(&self, n: usize) -> Option<&Self> {
+        let mut node = self;
+        for _ in 0..n {
+            node = node.next.0.as_ref()?;
+        }
+        Some(node)
     }
     /// 获取可变子节点
+    /// # 例子
     /// ```
     /// use link::*;
     /// let mut l: Link<usize> = link![1,2,3];
@@ -42,10 +63,27 @@ impl<T> Node<T> {
     /// node.next_mut().unwrap().value = 4;
     /// assert_eq!(l, link![1,2,4]);
     /// ```
-    pub fn next_mut(&mut self) -> Option<&mut Box<Node<T>>> {
-        self.next.0.as_mut()
+    pub fn next_mut(&mut self) -> Option<&mut Self> {
+        self.next.0.as_mut().map(|n| n.as_mut())
+    }
+    /// 可变节点跳过
+    /// # 例子
+    /// ```
+    /// use link::*;
+    /// let mut l: Link<usize> = link![1,2,3,4];
+    /// let node: &mut Node<usize> = l.get_mut(1).unwrap();
+    /// node.skip_mut(1).unwrap().value = 5;
+    /// assert_eq!(l, link![1,2,5,4]);
+    /// ```
+    pub fn skip_mut(self: &mut Self, n: usize) -> Option<&mut Self>{
+        let mut node = self;
+        for _ in 0..n {
+            node = node.next.0.as_mut()?;
+        }
+        Some(node)
     }
     /// 插入子节点
+    /// # 例子
     /// ```
     /// use link::*;
     /// let mut l: Link<usize> = link![1,2,3];
@@ -53,11 +91,13 @@ impl<T> Node<T> {
     /// node.insert_next(4);
     /// assert_eq!(l, link![1,2,4,3]);
     /// ```
-    pub fn insert_next(&mut self, value: T) {
+    pub fn insert_next(&mut self, value: T) -> &mut Self{
         let n = Node::new(value, self.next.0.take());
         self.next = Link::from(Some(Box::new(n)));
+        self.next.0.as_mut().unwrap()
     }
     /// 删除子节点
+    /// # 例子
     /// ```
     /// use link::*;
     /// let mut l: Link<usize> = link![1,2,3];
@@ -150,6 +190,22 @@ impl<T> Link<T> {
             None => *self = other,
             //非空链表
             Some(node) => Self::end_node(node).next = other,
+        }
+    }
+    /// 分割链表
+    /// # 例子
+    /// ```
+    /// use link::*;
+    /// let mut a: Link<isize> = link![1, 2, 3];
+    /// let b = a.split_off(0);
+    /// assert_eq!(a, link![1]);
+    /// assert_eq!(b, link![2, 3]);
+    /// ```
+    pub fn split_off(&mut self, at: usize) -> Self {
+        if let Some(node) = self.get_mut(at) {
+            Link::from(node.next.0.take())
+        } else {
+            Link::new()
         }
     }
     /// 转移链表，转移后原链表为空链表
@@ -401,6 +457,44 @@ impl<'a, T> iter::Iterator for IterMut<'a, T> {
         Some(&mut node.value)
     }
 }
+impl<'a, T> IterMut<'a, T> {
+    /// 迭代器插入结点
+    /// ```
+    /// use link::*;
+    /// let mut l: Link<usize> = link![1,2,3];
+    /// let mut a = l.iter_mut();
+    /// a.next();
+    /// a.insert_next(4).unwrap();
+    /// assert_eq!(l, link![1,2,4,3]);
+    /// ```
+    pub fn insert_next(&mut self, value: T) -> Result<(), &str> {
+        if let Some(node) = &mut self.data {
+            let n = Node::new(value, node.next.0.take());
+            node.next = Link::from(Some(Box::new(n)));
+            Ok(())
+        } else {
+            Err("The iterator is pointed at no data!")
+        }
+    }
+    /// 迭代器删除结点
+    /// ```
+    /// use link::*;
+    /// let mut l: Link<usize> = link![1,2,3];
+    /// let mut a = l.iter_mut();
+    /// a.next();
+    /// assert_eq!(a.pop_next(), Some(3));
+    /// assert_eq!(l, link![1,2]);
+    /// ```
+    pub fn pop_next(&mut self) -> Option<T> {
+        if let Some(node) = &mut self.data {
+            let n = node.next.0.take()?;
+            node.next = n.next;
+            Some(n.value)
+        } else {
+            None
+        }
+    }
+}
 /// 可变引用的迭代适配器
 /// # 例子
 /// ```
@@ -633,11 +727,10 @@ where
 mod tests {
     #[test]
     fn test1() {  
-     use crate::*;
-    let mut l: Link<usize> = link![1,2,3];
-    let a = l.get_mut(1).unwrap();
-    a.next_mut().unwrap().value = 4;
-    assert_eq!(l, link![1,2,4])
-     
+    use crate::*;
+    let mut a: Link<isize> = link![1, 2, 3];
+    let b = a.split_off(1);
+    assert_eq!(a, link![1, 2]);
+    assert_eq!(b, link![3]);
     }
 }
